@@ -59,10 +59,10 @@ class BootSplash(QWidget):
             logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
             pix = QPixmap(logo_path)
             if not pix.isNull():
-                # Scale to fit within splash pixel bounds (width x height), keep aspect ratio
+                # Scale to fit within splash with margin (0.7 = 70% of fit size so logo doesn't touch edges)
                 rw = self.width / pix.width()
                 rh = self.height / pix.height()
-                r = min(rw, rh)
+                r = min(rw, rh) * 0.7
                 w = max(1, int(pix.width() * r))
                 h = max(1, int(pix.height() * r))
                 pix = pix.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
