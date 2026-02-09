@@ -37,7 +37,7 @@ def get_app_dir():
 
 
 def get_effective_screen_size(desired_width: int, desired_height: int, fit_to_screen: bool = True):
-    """Return (width, height). If fit_to_screen is True, cap to primary screen; else use desired size (e.g. 2560x720 on Pi)."""
+    """Return (width, height). If fit_to_screen is True, use full primary screen size (geometry); else use desired size (e.g. 2560x720 on Pi)."""
     if not fit_to_screen:
         return desired_width, desired_height
     app = QApplication.instance()
@@ -46,7 +46,8 @@ def get_effective_screen_size(desired_width: int, desired_height: int, fit_to_sc
     screen = app.primaryScreen()
     if screen is None:
         return desired_width, desired_height
-    geom = screen.availableGeometry()
+    # Use geometry() (full screen) so the window fills the display; availableGeometry() would subtract taskbar/panels and make the window too small
+    geom = screen.geometry()
     w = min(desired_width, geom.width())
     h = min(desired_height, geom.height())
     return w, h
