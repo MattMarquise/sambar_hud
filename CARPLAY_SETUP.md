@@ -6,16 +6,31 @@ This guide covers two ways to get CarPlay on the right half of the Sambar HUD di
 
 ## Quick setup: LIVI on Linux PC (x86_64) or Raspberry Pi
 
-1. **Install LIVI**
-   - **Releases**: [LIVI on GitHub](https://github.com/f-io/LIVI/releases) — download the AppImage for your system:
-     - **Linux PC**: `pi-carplay-*-x86_64.AppImage` (or `LIVI-*-x86_64.AppImage`)
-     - **Raspberry Pi**: `pi-carplay-*-arm64.AppImage`
-   - Create a folder and put the AppImage there:
+1. **Install LIVI** (detailed steps)
+   - Open the LIVI releases page in your browser: **https://github.com/f-io/LIVI/releases**
+   - Pick a release (e.g. the latest, such as **v5.1.0** or **v4.1.3**). Click the release tag to open it.
+   - Scroll to the **Assets** section and expand it if it’s collapsed.
+   - Download the AppImage that matches your machine:
+     - **Linux PC (Intel/AMD 64-bit)**: choose the file whose name contains **x86_64** and ends in **.AppImage** (e.g. `LIVI-5.1.0-x86_64.AppImage` or `pi-carplay-4.1.3-x86_64.AppImage`).
+     - **Raspberry Pi (64-bit)**: choose the file whose name contains **arm64** and ends in **.AppImage** (e.g. `LIVI-5.1.0-arm64.AppImage` or `pi-carplay-4.1.3-arm64.AppImage`).
+   - After the download finishes, create the LIVI folder and put the AppImage there. In a terminal:
      ```bash
      mkdir -p ~/LIVI
-     # Move the downloaded AppImage into ~/LIVI/ (e.g. pi-carplay-4.1.2-x86_64.AppImage)
+     ```
+     Then move the downloaded file into `~/LIVI`. For example, if it’s in your Downloads folder and named `LIVI-5.1.0-x86_64.AppImage`:
+     ```bash
+     mv ~/Downloads/LIVI-5.1.0-x86_64.AppImage ~/LIVI/
+     ```
+     (Use the actual filename you downloaded.)
+   - Make the AppImage executable:
+     ```bash
      chmod +x ~/LIVI/*.AppImage
      ```
+   - Check that Sambar HUD will find it:
+     ```bash
+     ls ~/LIVI/
+     ```
+     You should see one (or more) `.AppImage` files. Sambar HUD looks for any file in `~/LIVI/` whose name contains `x86_64` (on a PC) or `arm64` (on a Pi) and ends with `.AppImage`.
 
 2. **USB dongle (Carlinkit CPC200-CCPA or CPC200-CCPW)**
    - Plug the dongle into the PC or Pi. For non-Pi Linux, add udev rules so your user can access it:
