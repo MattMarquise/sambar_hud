@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  carplay-hud:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: sambar_hud
+    environment:
+      - DISPLAY=:99
+      - SCREEN_WIDTH=2560
+      - SCREEN_HEIGHT=720
+    volumes:
+      - .:/app
+    # For Mac development, we'll use Xvfb inside the container
+    # For Linux with X11, uncomment the following:
+    # - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # network_mode: host
+    command: >
+      sh -c "
+        Xvfb :99 -screen 0 ${SCREEN_WIDTH}x${SCREEN_HEIGHT}x24 -ac +extension GLX +render -noreset &
+        sleep 2 &&
+        python3 main.py
+      "

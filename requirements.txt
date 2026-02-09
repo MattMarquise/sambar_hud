@@ -1,0 +1,29 @@
+# GUI Framework (use PyQt6-WebEngine for Qt6; PyQtWebEngine is Qt5-only)
+PyQt6>=6.4.0
+PyQt6-WebEngine>=6.4.0
+
+# CarPlay integration (using carplay-receiver)
+# Note: Requires carplay-receiver to be installed separately
+# See CARPLAY_SETUP.md for installation instructions
+pyusb==1.2.1
+
+# Media streaming
+python-vlc==3.0.20123
+pygame==2.5.2
+
+# System utilities
+psutil==5.9.8
+pyudev>=0.24.0,<0.25
+
+# Configuration
+pyyaml==6.0.1
+
+# Network utilities
+requests==2.31.0
+zeroconf==0.131.0
+
+# AirPlay support
+pyatv==0.14.0
+
+# Steam Link (will use system Steam Link app or web interface)
+# Note: Steam Link may need to be installed separately on Raspberry Pi

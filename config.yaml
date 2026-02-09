@@ -1,0 +1,29 @@
+# Sambar HUD Configuration
+
+# Display settings
+screen_width: 2560
+screen_height: 720
+
+# CarPlay settings (right side - driver side for RHD)
+carplay:
+  enabled: true
+  port: 8080
+  auto_connect: true
+
+# Entertainment settings (left side)
+entertainment:
+  steam_link_enabled: true
+  youtube_enabled: true
+  netflix_enabled: true
+  airplay_enabled: true
+  default_mode: steam_link  # Options: steam_link, youtube, netflix, airplay
+
+# Kiosk mode settings
+kiosk_mode:
+  enabled: true
+  auto_start: true
+
+# Performance settings (for Raspberry Pi optimization)
+performance:
+  low_power_mode: false
+  gpu_mem: 128  # MB - GPU memory split for Raspberry Pi
