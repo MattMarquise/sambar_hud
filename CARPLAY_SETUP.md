@@ -4,6 +4,41 @@ This guide covers two ways to get CarPlay on the right half of the Sambar HUD di
 
 ---
 
+## Quick setup: LIVI on Linux PC (x86_64) or Raspberry Pi
+
+1. **Install LIVI**
+   - **Releases**: [LIVI on GitHub](https://github.com/f-io/LIVI/releases) — download the AppImage for your system:
+     - **Linux PC**: `pi-carplay-*-x86_64.AppImage` (or `LIVI-*-x86_64.AppImage`)
+     - **Raspberry Pi**: `pi-carplay-*-arm64.AppImage`
+   - Create a folder and put the AppImage there:
+     ```bash
+     mkdir -p ~/LIVI
+     # Move the downloaded AppImage into ~/LIVI/ (e.g. pi-carplay-4.1.2-x86_64.AppImage)
+     chmod +x ~/LIVI/*.AppImage
+     ```
+
+2. **USB dongle (Carlinkit CPC200-CCPA or CPC200-CCPW)**
+   - Plug the dongle into the PC or Pi. For non-Pi Linux, add udev rules so your user can access it:
+     ```bash
+     sudo bash -c 'echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"1314\", ATTR{idProduct}==\"152*\", MODE=\"0660\", OWNER=\"${SUDO_USER:-$USER}\"" > /etc/udev/rules.d/99-LIVI.rules; udevadm control --reload-rules; udevadm trigger'
+     ```
+     Then unplug and replug the dongle (or reboot).
+
+3. **Window positioning (optional)**
+   - Sambar HUD will auto-launch LIVI and place its window on the right half (leaving the sidebar visible). Install `wmctrl` if the window doesn't move:
+     ```bash
+     sudo apt install wmctrl
+     ```
+
+4. **Config (optional)**
+   - In `config.yaml`, under `carplay`, you can set:
+     - `livi_appimage_path: ~/LIVI/pi-carplay-4.1.2-x86_64.AppImage` (or your exact path) if auto-detect doesn't find it.
+     - `livi_auto_launch: false` to disable auto-starting LIVI on boot.
+
+Sambar HUD will look for an AppImage in `~/LIVI/` by architecture (x86_64 on PC, arm64 on Pi). No need to edit code.
+
+---
+
 ## If your Carlinkit dongle requires “wired CarPlay” on the Pi
 
 Many Carlinkit dongles only enable **wireless** CarPlay after the vehicle computer (your Raspberry Pi) is already running a **wired CarPlay host**. The dongle plugs into the Pi via USB; the Pi runs the CarPlay stack and displays the UI; the iPhone then connects to the dongle wirelessly.

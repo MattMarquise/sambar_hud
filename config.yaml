@@ -6,11 +6,14 @@ screen_height: 720
 # true = size window to your display and scale HUD to fit (2048x576, 2560x720, etc.). false = always use screen_width x screen_height above.
 fit_to_screen: true
 
-# CarPlay settings (right side - driver side for RHD)
+# CarPlay settings (right side - driver side for RHD) via LIVI
 carplay:
   enabled: true
   port: 8080
   auto_connect: true
+  # Optional: path to LIVI AppImage (e.g. ~/LIVI/pi-carplay-4.1.2-x86_64.AppImage). If unset, app looks in ~/LIVI/ for *x86_64*.AppImage (PC) or *arm64*.AppImage (Pi).
+  # livi_appimage_path: ~/LIVI/pi-carplay-4.1.2-x86_64.AppImage
+  livi_auto_launch: true  # start LIVI and position on right half after boot splash
 
 # Entertainment settings (left side)
 entertainment:

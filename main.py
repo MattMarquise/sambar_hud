@@ -7,6 +7,8 @@ Uses index.html as the full-screen HUD UI (Pi).
 
 import sys
 import os
+import glob
+import platform
 
 import subprocess
 import threading
@@ -99,11 +101,11 @@ def _get_steam_link_window_id() -> str | None:
         return None
 
 
-# Left-half geometry: position (0,0), size 1280x720
+# Left-half geometry: position (0,0), size 1280x720 (overridden when positioning with explicit size)
 _LEFT_HALF_GEOM = "0,0,0,1280,720"
 
-# Right-half CarPlay (LIVI): x=1280, width 1192 (1280-88 so the one sidebar in index.html is not covered)
-_LIVI_RIGHT_GEOM = "0,1280,0,1192,720"
+# Sidebar width (px) so LIVI doesn't cover the right-edge sidebar
+_LIVI_SIDEBAR_WIDTH = 88
 
 
 def _get_livi_window_id() -> str | None:
@@ -129,11 +131,20 @@ def _get_livi_window_id() -> str | None:
         return None
 
 
-def _position_livi_window(wmctrl_window_id: str) -> None:
+def _livi_right_geom(effective_width: int, effective_height: int) -> str:
+    """wmctrl -e format: gravity,x,y,width,height. Right half, leaving sidebar (88px) visible."""
+    x = effective_width // 2
+    w = (effective_width // 2) - _LIVI_SIDEBAR_WIDTH
+    h = effective_height
+    return f"0,{x},0,{w},{h}"
+
+
+def _position_livi_window(wmctrl_window_id: str, effective_width: int, effective_height: int) -> None:
     """Move and resize LIVI to the right half, leaving 88px for the sidebar."""
+    geom = _livi_right_geom(effective_width, effective_height)
     try:
         subprocess.run(
-            ["wmctrl", "-i", "-r", wmctrl_window_id, "-e", _LIVI_RIGHT_GEOM],
+            ["wmctrl", "-i", "-r", wmctrl_window_id, "-e", geom],
             capture_output=True,
             timeout=2,
         )
@@ -364,11 +375,34 @@ def _kill_other_livi_processes() -> None:
         pass
 
 
-def _launch_livi(app_dir: str) -> bool:
-    """Launch only LIVI 4.1.2 (pi-carplay-4.1.2-arm64.AppImage). No other version. Returns True if launched."""
-    # Exact path that works for you; no fallback to LIVI.AppImage or 'livi' (those start the wrong version)
-    exe = os.path.expanduser("~/LIVI/pi-carplay-4.1.2-arm64.AppImage")
-    if not os.path.isfile(exe):
+def _find_livi_appimage(config: "Config") -> str | None:
+    """Resolve LIVI AppImage path: config carplay.livi_appimage_path, or ~/LIVI/ by arch (x86_64 vs arm64)."""
+    path_cfg = config.get("carplay.livi_appimage_path") if config else None
+    if path_cfg:
+        exe = os.path.expanduser(path_cfg)
+        if os.path.isfile(exe):
+            return exe
+    livi_dir = os.path.expanduser("~/LIVI")
+    if not os.path.isdir(livi_dir):
+        return None
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        pattern = os.path.join(livi_dir, "*x86_64*.AppImage")
+    elif machine in ("aarch64", "arm64"):
+        pattern = os.path.join(livi_dir, "*arm64*.AppImage")
+    else:
+        pattern = os.path.join(livi_dir, "*.AppImage")
+    candidates = sorted(glob.glob(pattern), reverse=True)  # prefer newer by name
+    for exe in candidates:
+        if os.path.isfile(exe):
+            return exe
+    return None
+
+
+def _launch_livi(app_dir: str, config: "Config") -> bool:
+    """Launch LIVI (CarPlay) AppImage. Path from config or ~/LIVI/ (x86_64 or arm64). Returns True if launched."""
+    exe = _find_livi_appimage(config)
+    if not exe:
         return False
     _kill_other_livi_processes()
     try:
@@ -399,11 +433,14 @@ def _set_overlay_mode(main_window: "MainWindow", on: bool) -> None:
 
 
 def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
-    """Launch LIVI 4.1.2, position it over the right side (not covering the sidebar), raise it. App stays fullscreen."""
-    if not _launch_livi(get_app_dir()):
+    """Launch LIVI (CarPlay), position it over the right side (not covering the sidebar), raise it. App stays fullscreen."""
+    if not _launch_livi(get_app_dir(), main_window.config):
         return
     _set_overlay_mode(main_window, True)
     main_window.throttle_page(True)  # Reduce our CPU use so CarPlay audio doesn't skip
+
+    eff_w = getattr(main_window, "_effective_width", 2560)
+    eff_h = getattr(main_window, "_effective_height", 720)
 
     def run():
         for _ in range(50):
@@ -411,9 +448,9 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
             wid = _get_livi_window_id()
             if wid:
                 _set_overlay_window_flags(wid)
-                _position_livi_window(wid)
+                _position_livi_window(wid, eff_w, eff_h)
                 time.sleep(0.2)
-                _position_livi_window(wid)
+                _position_livi_window(wid, eff_w, eff_h)
                 _raise_livi_window(wid)
                 # Return focus to our app so Pi taskbar doesn't stay visible
                 QTimer.singleShot(200, lambda mw=main_window: (mw.raise_(), mw.activateWindow()))
@@ -421,7 +458,7 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
                     time.sleep(1.0)
                     w = _get_livi_window_id()
                     if w:
-                        _position_livi_window(w)
+                        _position_livi_window(w, eff_w, eff_h)
                         _set_overlay_window_flags(w)
                         _raise_livi_window(w)
                 break
