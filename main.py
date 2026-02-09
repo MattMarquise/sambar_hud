@@ -418,10 +418,16 @@ def _launch_livi(app_dir: str, config: "Config") -> bool:
         return False
     _kill_other_livi_processes()
     env = os.environ.copy()
-    # So LIVI's pw-play (audio) finds our wrapper that strips --raw for older PipeWire
+    # So LIVI's spawned pw-play (audio) is findable: our wrapper first, then /usr/bin, /bin
     scripts_dir = os.path.join(get_app_dir(), "scripts")
+    path_parts = []
     if os.path.isdir(scripts_dir):
-        env["PATH"] = scripts_dir + os.pathsep + env.get("PATH", "")
+        path_parts.append(scripts_dir)
+    for d in ("/usr/bin", "/bin"):
+        if os.path.isdir(d):
+            path_parts.append(d)
+    path_parts.append(env.get("PATH", ""))
+    env["PATH"] = os.pathsep.join(path_parts)
     try:
         subprocess.Popen(
             [exe, "--no-sandbox"],

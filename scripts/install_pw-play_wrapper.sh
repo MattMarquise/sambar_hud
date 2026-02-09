@@ -24,5 +24,7 @@ fi
 echo "Installing wrapper as $REAL"
 cp "$WRAPPER" "$REAL"
 chmod +x "$REAL"
-echo "Done. LIVI should now get audio. To undo: sudo mv /usr/bin/pw-play.real /usr/bin/pw-play"
+echo "Done. LIVI should now get audio."
+echo "If you see '[AudioOutput] spawn pw-play ENOENT', ensure this script was run (so /usr/bin/pw-play exists)."
+echo "To undo: sudo mv /usr/bin/pw-play.real /usr/bin/pw-play"
 echo "Then remove the wrapper: sudo rm /usr/bin/pw-play (and restore from package if needed)."
