@@ -191,6 +191,18 @@ def _set_overlay_window_flags(wmctrl_window_id: str) -> None:
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
+
+
+def _set_livi_stays_above(wmctrl_window_id: str) -> None:
+    """Keep LIVI window above our HUD so it doesn't disappear when user taps the left side."""
+    try:
+        subprocess.run(
+            ["wmctrl", "-i", "-r", wmctrl_window_id, "-b", "add,above"],
+            capture_output=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
     # Remove window decorations (title bar) so it looks borderless over our app
     try:
         # xprop -id expects decimal; wmctrl gives hex (0x02e00003)
@@ -407,7 +419,7 @@ def _launch_livi(app_dir: str, config: "Config") -> bool:
     _kill_other_livi_processes()
     try:
         subprocess.Popen(
-            [exe],
+            [exe, "--no-sandbox"],
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -448,18 +460,19 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
             wid = _get_livi_window_id()
             if wid:
                 _set_overlay_window_flags(wid)
+                _set_livi_stays_above(wid)  # keep CarPlay on top so it doesn't disappear when user taps left
                 _position_livi_window(wid, eff_w, eff_h)
                 time.sleep(0.2)
                 _position_livi_window(wid, eff_w, eff_h)
+                _set_livi_stays_above(wid)
                 _raise_livi_window(wid)
-                # Return focus to our app so Pi taskbar doesn't stay visible
-                QTimer.singleShot(200, lambda mw=main_window: (mw.raise_(), mw.activateWindow()))
                 for _ in range(10):
                     time.sleep(1.0)
                     w = _get_livi_window_id()
                     if w:
                         _position_livi_window(w, eff_w, eff_h)
                         _set_overlay_window_flags(w)
+                        _set_livi_stays_above(w)
                         _raise_livi_window(w)
                 break
     threading.Thread(target=run, daemon=True).start()
@@ -594,6 +607,22 @@ class MainWindow(QMainWindow):
         quit_fn = app.quit
         QShortcut(QKeySequence.StandardKey.Quit, self).activated.connect(quit_fn)
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self).activated.connect(quit_fn)
+
+    def _keep_livi_on_top_if_shown(self) -> None:
+        """When our window gets focus (e.g. user tapped left), keep LIVI on top on the right so it doesn't disappear."""
+        wid = _get_livi_window_id()
+        if wid is None:
+            return
+        eff_w = getattr(self, "_effective_width", 2560)
+        eff_h = getattr(self, "_effective_height", 720)
+        _set_livi_stays_above(wid)
+        _position_livi_window(wid, eff_w, eff_h)
+        _raise_livi_window(wid)
+
+    def focusInEvent(self, event):
+        """Re-raise LIVI when our window gets focus so CarPlay stays visible on the right."""
+        super().focusInEvent(event)
+        QTimer.singleShot(50, self._keep_livi_on_top_if_shown)
 
     def restoreFullScreen(self) -> None:
         """Restore fullscreen when Steam/LIVI layout is closed. Re-add StaysOnTop so HUD stays on top."""

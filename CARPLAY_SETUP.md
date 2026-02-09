@@ -52,6 +52,148 @@ This guide covers two ways to get CarPlay on the right half of the Sambar HUD di
 
 Sambar HUD will look for an AppImage in `~/LIVI/` by architecture (x86_64 on PC, arm64 on Pi). No need to edit code.
 
+### Dongle connects then disconnects (Linux PC)
+
+If the Carlinkit works on the Pi but on a Linux PC it **connects, then disconnects, then briefly reconnects**, the usual cause is **USB autosuspend**: the kernel suspends the USB port to save power, and the dongle drops off. Try the following.
+
+**1. Disable USB autosuspend for the Carlinkit (recommended)**
+
+With the dongle plugged in, find its USB device path:
+
+```bash
+lsusb
+```
+
+Look for a line with `1314` and `152x` (e.g. `Bus 001 Device 005: ID 1314:1521 ...`). Note the bus and device numbers. Then:
+
+```bash
+# Replace 1-5 with your bus-device (e.g. 1-5 for Bus 001 Device 005)
+echo -1 | sudo tee /sys/bus/usb/devices/1-5/power/autosuspend_delay_ms
+echo on | sudo tee /sys/bus/usb/devices/1-5/power/control
+```
+
+Use the actual bus–port path. You can list paths for vendor 1314:
+
+```bash
+for d in /sys/bus/usb/devices/*/idVendor; do
+  [ "$(cat "$d")" = "1314" ] && echo "${d%/idVendor}"
+done
+```
+
+Then run the two `echo` commands above with that path (e.g. `1-5` or `3-2.1`). **This lasts until you unplug the dongle or reboot.** If it fixes the problem, make it persistent (see below).
+
+**2. Make it persistent (udev)**
+
+Create a udev rule that disables autosuspend whenever the Carlinkit is connected:
+
+```bash
+sudo tee /etc/udev/rules.d/99-carlinkit-no-suspend.rules << 'EOF'
+# Disable USB autosuspend for Carlinkit (LIVI) so it doesn't connect/disconnect
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1314", ATTR{idProduct}=="152*", TEST=="power/control", ATTR{power/control}="on"
+EOF
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Unplug and replug the dongle, then start LIVI again.
+
+**3. Only USB 3.0 ports (no USB 2.0)**
+
+If you only have USB 3 (blue) ports and the dongle still loops after the steps above, try:
+
+- **Kernel boot parameter** — Disable USB autosuspend for all devices at boot. Edit the kernel command line (e.g. in GRUB: `sudo nano /etc/default/grub`, add `usbcore.autosuspend=-1` to `GRUB_CMDLINE_LINUX_DEFAULT`, then `sudo update-grub` and reboot). Example:
+  ```text
+  GRUB_CMDLINE_LINUX_DEFAULT="quiet splash usbcore.autosuspend=-1"
+  ```
+  After reboot, plug in the dongle and try LIVI again.
+
+- **USB 2.0 hub (hardware)** — Many Carlinkit-style dongles are more stable behind a **USB 2.0 hub**. Plug a cheap USB 2.0 hub into your PC, then plug the dongle into the hub. That gives the dongle a USB 2.0 bus and often stops connect/disconnect loops when USB 3 alone doesn't.
+
+**4. Other checks**
+
+- **Power**: If the port is underpowered, use a **powered USB hub**.
+- **Cable**: Try a different USB cable (some charge-only cables cause flaky data).
+
+### Do I need to install anything for the Carlinkit?
+
+You don't need a special driver. The dongle is a standard USB device; LIVI uses **libusb** (usually already on the system). Install the following so the dongle is detected and your user can access it:
+
+**Required**
+
+- **udev rules** — So your user can open the device without root. Run once:
+  ```bash
+  sudo bash -c 'echo "SUBSYSTEM==\"usb\", ATTR{idVendor}==\"1314\", ATTR{idProduct}==\"152*\", MODE=\"0660\", OWNER=\"${SUDO_USER:-$USER}\"" > /etc/udev/rules.d/99-LIVI.rules; udevadm control --reload-rules; udevadm trigger'
+  ```
+  Then unplug and replug the dongle (or reboot).
+
+**Useful for debugging**
+
+- **usbutils** — For `lsusb` to see the dongle:
+  ```bash
+  sudo apt install usbutils
+  lsusb
+  ```
+  Look for `ID 1314:152x`.
+
+**Optional (only if LIVI reports missing libs)**
+
+- **libusb-1.0-0** — Often already installed. If LIVI errors mention libusb:
+  ```bash
+  sudo apt install libusb-1.0-0
+  ```
+
+If the dongle appears in `lsusb` but LIVI still doesn't see it, check that your user is the one set in the udev rule (`OWNER`) and that you replugged the dongle after adding the rule.
+
+### No audio from LIVI (other sounds work)
+
+If CarPlay/LIVI has no sound but your speaker works for the browser and other apps, LIVI is likely using a different audio output or the stream is muted.
+
+**1. Check LIVI's audio output**
+
+- Open **LIVI** and go to its **Settings** (gear icon or similar).
+- Look for **Audio** / **Output device** / **Playback** and select your speaker or **Default** (system default output). Save and try playing music or maps voice in CarPlay again.
+
+**2. Route LIVI to your speaker (PulseAudio/PipeWire)**
+
+While something is playing in CarPlay (e.g. music), open the system volume or **PulseAudio Volume Control**:
+
+```bash
+# Install if needed (Ubuntu/Debian)
+sudo apt install pavucontrol
+pavucontrol
+```
+
+- In **pavucontrol**, open the **Playback** tab. Find **LIVI** or **Chrome** / **Electron** (LIVI is Electron-based).  
+- Ensure its volume is up and the **output device** is your speaker, not a dummy or another sink.  
+- In the **Output Devices** tab, set your speaker as the default (green checkmark) if it isn’t already.
+
+**3. Set default sink from the command line**
+
+List sinks and set the default to your speaker:
+
+```bash
+pactl info
+pactl list short sinks
+pactl set-default-sink <sink_name_or_index>
+```
+
+Example: `pactl set-default-sink alsa_output.usb-...` or the index number. Then restart LIVI and try again.
+
+**4. PipeWire (if you use it)**
+
+LIVI is designed to work with PipeWire. If you're on PipeWire (e.g. Ubuntu 22.04+ with pipewire-pulse):
+
+```bash
+# See default and available devices
+pw-cli info all
+```
+
+Ensure the default playback node is your speaker. Restart LIVI after changing the default.
+
+**5. Restart LIVI**
+
+After changing the default output or LIVI’s audio setting, fully quit LIVI and start it again (or restart Sambar HUD so it relaunches LIVI).
+
 ---
 
 ## If your Carlinkit dongle requires “wired CarPlay” on the Pi
