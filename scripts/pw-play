@@ -1,0 +1,22 @@
+#!/bin/bash
+# Wrapper for pw-play so LIVI works with PipeWire that doesn't support --raw.
+# LIVI calls "pw-play --raw ..."; older pw-play doesn't know --raw. We strip
+# --raw and add --format=s16 --rate=48000 --channels=2 instead, then call
+# the real pw-play.
+REAL_PWPLAY="${REAL_PWPLAY:-/usr/bin/pw-play}"
+args=()
+removed_raw=false
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--raw" ]]; then
+    removed_raw=true
+    shift
+    continue
+  fi
+  args+=("$1")
+  shift
+done
+if [[ "$removed_raw" == true ]]; then
+  exec "$REAL_PWPLAY" --format=s16 --rate=48000 --channels=2 "${args[@]}"
+else
+  exec "$REAL_PWPLAY" "${args[@]}"
+fi
