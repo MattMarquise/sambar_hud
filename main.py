@@ -36,8 +36,10 @@ def get_app_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-def get_effective_screen_size(desired_width: int, desired_height: int):
-    """Return (width, height) capped to the primary screen so the window fits on display."""
+def get_effective_screen_size(desired_width: int, desired_height: int, fit_to_screen: bool = True):
+    """Return (width, height). If fit_to_screen is True, cap to primary screen; else use desired size (e.g. 2560x720 on Pi)."""
+    if not fit_to_screen:
+        return desired_width, desired_height
     app = QApplication.instance()
     if app is None:
         return desired_width, desired_height
@@ -484,7 +486,10 @@ class MainWindow(QMainWindow):
 
         desired_width = self.config.get("screen_width", 2560)
         desired_height = self.config.get("screen_height", 720)
-        self._effective_width, self._effective_height = get_effective_screen_size(desired_width, desired_height)
+        fit_to_screen = self.config.get("fit_to_screen", False)
+        self._effective_width, self._effective_height = get_effective_screen_size(
+            desired_width, desired_height, fit_to_screen
+        )
         self.setFixedSize(self._effective_width, self._effective_height)
         self.setGeometry(0, 0, self._effective_width, self._effective_height)
 
@@ -530,8 +535,11 @@ class MainWindow(QMainWindow):
         self._install_quit_shortcuts()
 
     def _apply_hud_zoom(self) -> None:
-        """Scale the 2560x720 HUD to fit the window so the whole UI (e.g. power button) is visible."""
+        """Scale the 2560x720 HUD to fit the window when fit_to_screen is True; else use 1:1 (no zoom)."""
         if self.view is None:
+            return
+        if not self.config.get("fit_to_screen", False):
+            self.view.setZoomFactor(1.0)
             return
         zoom = min(
             self._effective_width / 2560.0,
@@ -627,7 +635,8 @@ def main():
     config = Config()
     screen_width = config.get("screen_width", 2560)
     screen_height = config.get("screen_height", 720)
-    splash_width, splash_height = get_effective_screen_size(screen_width, screen_height)
+    fit_to_screen = config.get("fit_to_screen", False)
+    splash_width, splash_height = get_effective_screen_size(screen_width, screen_height, fit_to_screen)
     boot_duration = 3000  # ms – 3s so bootintro.mp3 plays before fade to main
 
     main_window = MainWindow()

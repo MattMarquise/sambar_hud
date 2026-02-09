@@ -3,6 +3,8 @@
 # Display settings
 screen_width: 2560
 screen_height: 720
+# true = size window to your display and scale HUD to fit (2048x576, 2560x720, etc.). false = always use screen_width x screen_height above.
+fit_to_screen: true
 
 # CarPlay settings (right side - driver side for RHD)
 carplay:
