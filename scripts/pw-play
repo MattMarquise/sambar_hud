@@ -25,7 +25,8 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 if [[ "$removed_raw" == true ]]; then
-  exec "$REAL_PWPLAY" --format=s16 --rate=44100 --channels=2 "${args[@]}"
+  # Real binary is pw-cat: needs --playback for playback mode
+  exec "$REAL_PWPLAY" --playback --format=s16 --rate=44100 --channels=2 "${args[@]}"
 else
   exec "$REAL_PWPLAY" "${args[@]}"
 fi
