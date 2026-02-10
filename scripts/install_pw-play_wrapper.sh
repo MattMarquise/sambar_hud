@@ -21,11 +21,27 @@ else
 fi
 if [[ -z "$REAL" ]]; then
   echo "Error: pw-play not found on this system."
-  echo "Install PipeWire first, then run this script again. Examples:"
-  echo "  Debian/Ubuntu: sudo apt install pipewire-audio pipewire-bin"
-  echo "  Fedora:        sudo dnf install pipewire-utils"
-  echo "  Arch:          sudo pacman -S pipewire"
-  echo "After installing, check with: which pw-play"
+  echo ""
+  echo "Install the PipeWire package that provides pw-play, then run this script again:"
+  echo ""
+  if command -v apt-get &>/dev/null; then
+    echo "  Debian/Ubuntu:"
+    echo "    sudo apt update"
+    echo "    sudo apt install pipewire pipewire-bin pipewire-audio"
+    echo ""
+    echo "  If that doesn't provide pw-play, search for it:"
+    echo "    apt search pipewire   # then install the package that has 'bin' or 'tools'"
+  elif command -v dnf &>/dev/null; then
+    echo "  Fedora:  sudo dnf install pipewire-utils"
+  elif command -v pacman &>/dev/null; then
+    echo "  Arch:    sudo pacman -S pipewire"
+  else
+    echo "  Debian/Ubuntu: sudo apt install pipewire pipewire-bin pipewire-audio"
+    echo "  Fedora:        sudo dnf install pipewire-utils"
+    echo "  Arch:          sudo pacman -S pipewire"
+  fi
+  echo ""
+  echo "After installing, run:  sudo $0"
   exit 1
 fi
 
