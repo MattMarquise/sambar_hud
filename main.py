@@ -547,34 +547,22 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
             wid = _get_livi_window_id()
             if wid:
                 _unmaximize_window(wid)
-                time.sleep(0.08)
-                _remove_window_decorations(wid)  # remove title bar first so resize uses full height
                 time.sleep(0.1)
-                _remove_window_decorations(wid)  # some WMs need a second nudge
+                _remove_window_decorations(wid)
                 _position_livi_window(wid, eff_w, eff_h)
                 _position_livi_window_xdotool(eff_w, eff_h)
                 _set_overlay_window_flags(wid)
-                _set_livi_stays_above(wid)  # above + decorations again
-                time.sleep(0.15)
-                _position_livi_window(wid, eff_w, eff_h)  # re-apply geometry after decoration change
-                _position_livi_window_xdotool(eff_w, eff_h)
-                _set_livi_vertical_maximize(wid)  # full height top-to-bottom
-                time.sleep(0.1)
-                _position_livi_window(wid, eff_w, eff_h)  # re-apply x/width in case vert maximize shifted it
+                _set_livi_stays_above(wid)
+                time.sleep(0.25)
+                _position_livi_window(wid, eff_w, eff_h)  # one re-apply after decoration change
                 _position_livi_window_xdotool(eff_w, eff_h)
                 _raise_livi_window(wid)
-                for _ in range(10):
+                # Keep LIVI on top for a bit without constantly resizing (avoids bending/flicker)
+                for _ in range(8):
                     time.sleep(1.0)
                     w = _get_livi_window_id()
                     if w:
-                        _position_livi_window(w, eff_w, eff_h)
-                        _position_livi_window_xdotool(eff_w, eff_h)
-                        _unmaximize_window(w)
-                        _remove_window_decorations(w)
-                        _set_overlay_window_flags(w)
                         _set_livi_stays_above(w)
-                        _set_livi_vertical_maximize(w)
-                        _position_livi_window(w, eff_w, eff_h)
                         _raise_livi_window(w)
                 break
     threading.Thread(target=run, daemon=True).start()
@@ -715,15 +703,7 @@ class MainWindow(QMainWindow):
         wid = _get_livi_window_id()
         if wid is None:
             return
-        eff_w = getattr(self, "_effective_width", 2560)
-        eff_h = getattr(self, "_effective_height", 720)
-        _unmaximize_window(wid)
-        _position_livi_window(wid, eff_w, eff_h)
-        _position_livi_window_xdotool(eff_w, eff_h)
-        _remove_window_decorations(wid)
         _set_livi_stays_above(wid)
-        _set_livi_vertical_maximize(wid)
-        _position_livi_window(wid, eff_w, eff_h)
         _raise_livi_window(wid)
 
     def focusInEvent(self, event):
