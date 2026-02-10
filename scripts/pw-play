@@ -4,10 +4,14 @@
 # --raw and add --format=s16 --rate=48000 --channels=2 instead, then call
 # the real pw-play. Use REAL_PWPLAY to point to the real binary (default:
 # pw-play.real if we are /usr/bin/pw-play, else /usr/bin/pw-play).
-if [[ -x /usr/bin/pw-play.real ]]; then
-  REAL_PWPLAY="${REAL_PWPLAY:-/usr/bin/pw-play.real}"
+if [[ -n "$REAL_PWPLAY" ]]; then
+  :
+elif [[ -x /usr/local/bin/pw-play.real ]]; then
+  REAL_PWPLAY=/usr/local/bin/pw-play.real
+elif [[ -x /usr/bin/pw-play.real ]]; then
+  REAL_PWPLAY=/usr/bin/pw-play.real
 else
-  REAL_PWPLAY="${REAL_PWPLAY:-/usr/bin/pw-play}"
+  REAL_PWPLAY=/usr/bin/pw-play
 fi
 args=()
 removed_raw=false

@@ -423,7 +423,7 @@ def _launch_livi(app_dir: str, config: "Config") -> bool:
     path_parts = []
     if os.path.isdir(scripts_dir):
         path_parts.append(scripts_dir)
-    for d in ("/usr/bin", "/bin"):
+    for d in ("/usr/local/bin", "/usr/bin", "/bin"):
         if os.path.isdir(d):
             path_parts.append(d)
     path_parts.append(env.get("PATH", ""))

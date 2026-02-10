@@ -144,6 +144,31 @@ You don't need a special driver. The dongle is a standard USB device; LIVI uses 
 
 If the dongle appears in `lsusb` but LIVI still doesn't see it, check that your user is the one set in the udev rule (`OWNER`) and that you replugged the dongle after adding the rule.
 
+### "[AudioOutput] spawn pw-play ENOENT" (no audio, LIVI can't find pw-play)
+
+If LIVI logs **spawn pw-play ENOENT**, it means the system can't find the `pw-play` command (used for CarPlay audio). On the **Linux PC where LIVI runs** (not the Pi), do this once:
+
+1. **Install PipeWire tools** (if needed):
+   ```bash
+   sudo apt install pipewire-audio pipewire-bin
+   ```
+
+2. **Install the pw-play wrapper** (so LIVI's audio process can run and older PipeWire gets the right format):
+   ```bash
+   cd ~/Downloads/sambar_hud   # or your sambar_hud path
+   sudo scripts/install_pw-play_wrapper.sh
+   ```
+
+3. **Confirm** `/usr/bin/pw-play` exists and is executable:
+   ```bash
+   ls -la /usr/bin/pw-play
+   which pw-play
+   ```
+
+4. **Start LIVI from Sambar HUD** (so it gets the right PATH), then try CarPlay again. If you still have no sound, follow the steps in **No audio from LIVI** below (pavucontrol, default sink, LIVI audio settings).
+
+On Raspberry Pi this often works without the wrapper because the Pi's PipeWire may support `--raw` or the environment is different.
+
 ### No audio from LIVI (other sounds work)
 
 If CarPlay/LIVI has no sound but your speaker works for the browser and other apps, LIVI is likely using a different audio output or the stream is muted.

@@ -1,30 +1,55 @@
 #!/bin/bash
 # Install pw-play wrapper so LIVI works with PipeWire that doesn't support --raw.
 # Run once with: sudo scripts/install_pw-play_wrapper.sh
-# This renames /usr/bin/pw-play to /usr/bin/pw-play.real and installs our
-# wrapper as /usr/bin/pw-play. Reversible by: sudo mv /usr/bin/pw-play.real /usr/bin/pw-play
+# Installs wrapper to /usr/bin/pw-play (if real is there) or /usr/local/bin/pw-play (else).
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REAL=/usr/bin/pw-play
 WRAPPER="$SCRIPT_DIR/pw-play"
-if [[ ! -f "$REAL" ]]; then
-  echo "Error: $REAL not found (install pipewire-bin first)."
-  exit 1
-fi
 if [[ ! -f "$WRAPPER" ]]; then
   echo "Error: Wrapper not found at $WRAPPER"
   exit 1
 fi
-if [[ -x /usr/bin/pw-play.real ]]; then
-  echo "Already installed (pw-play.real exists). Overwriting wrapper."
+
+# Find the real pw-play (often in /usr/bin; on some distros elsewhere)
+REAL=""
+if [[ -f /usr/bin/pw-play ]] && [[ ! -L /usr/bin/pw-play ]]; then
+  REAL=/usr/bin/pw-play
+elif [[ -f /usr/bin/pw-play.real ]]; then
+  REAL=/usr/bin/pw-play.real
 else
-  echo "Moving $REAL to ${REAL}.real"
-  mv "$REAL" "${REAL}.real"
+  REAL=$(find /usr -name 'pw-play' -type f -executable 2>/dev/null | head -1)
 fi
-echo "Installing wrapper as $REAL"
-cp "$WRAPPER" "$REAL"
-chmod +x "$REAL"
-echo "Done. LIVI should now get audio."
-echo "If you see '[AudioOutput] spawn pw-play ENOENT', ensure this script was run (so /usr/bin/pw-play exists)."
-echo "To undo: sudo mv /usr/bin/pw-play.real /usr/bin/pw-play"
-echo "Then remove the wrapper: sudo rm /usr/bin/pw-play (and restore from package if needed)."
+if [[ -z "$REAL" ]]; then
+  echo "Error: pw-play not found on this system."
+  echo "Install PipeWire first, then run this script again. Examples:"
+  echo "  Debian/Ubuntu: sudo apt install pipewire-audio pipewire-bin"
+  echo "  Fedora:        sudo dnf install pipewire-utils"
+  echo "  Arch:          sudo pacman -S pipewire"
+  echo "After installing, check with: which pw-play"
+  exit 1
+fi
+
+if [[ "$REAL" == /usr/bin/pw-play ]]; then
+  # Standard: real is /usr/bin/pw-play; replace with wrapper, keep real as .real
+  INSTALL_TO=/usr/bin/pw-play
+  if [[ -x /usr/bin/pw-play.real ]]; then
+    echo "Already have pw-play.real in /usr/bin. Overwriting wrapper."
+  else
+    echo "Moving /usr/bin/pw-play to /usr/bin/pw-play.real"
+    mv /usr/bin/pw-play /usr/bin/pw-play.real
+  fi
+  cp "$WRAPPER" /usr/bin/pw-play
+  chmod +x /usr/bin/pw-play
+  echo "Done. Wrapper installed at /usr/bin/pw-play"
+else
+  # Real is elsewhere (or .real): install wrapper and real into /usr/local/bin so 'pw-play' is findable
+  echo "Found real pw-play at: $REAL"
+  echo "Installing wrapper to /usr/local/bin/pw-play (real as /usr/local/bin/pw-play.real)"
+  mkdir -p /usr/local/bin
+  cp "$REAL" /usr/local/bin/pw-play.real
+  chmod +x /usr/local/bin/pw-play.real
+  cp "$WRAPPER" /usr/local/bin/pw-play
+  chmod +x /usr/local/bin/pw-play
+  echo "Done. Ensure /usr/local/bin is in your PATH (it usually is). Check: which pw-play"
+fi
+echo "LIVI should now get audio. To undo: remove the wrapper and restore the real binary (see script comments)."
