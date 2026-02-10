@@ -139,8 +139,20 @@ def _livi_right_geom(effective_width: int, effective_height: int) -> str:
     return f"0,{x},0,{w},{h}"
 
 
+def _unmaximize_window(wmctrl_window_id: str) -> None:
+    """Remove maximized/fullscreen so the window can be moved and resized (e.g. for LIVI/Steam Link)."""
+    try:
+        subprocess.run(
+            ["wmctrl", "-i", "-r", wmctrl_window_id, "-b", "remove,maximized_vert,maximized_horz,fullscreen"],
+            capture_output=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+
 def _position_livi_window(wmctrl_window_id: str, effective_width: int, effective_height: int) -> None:
-    """Move and resize LIVI to the right half, leaving 88px for the sidebar."""
+    """Move and resize LIVI to the right half, full height, leaving 88px for the sidebar."""
     geom = _livi_right_geom(effective_width, effective_height)
     try:
         subprocess.run(
@@ -471,18 +483,20 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
             time.sleep(0.4)
             wid = _get_livi_window_id()
             if wid:
-                _set_overlay_window_flags(wid)
-                _set_livi_stays_above(wid)  # keep CarPlay on top so it doesn't disappear when user taps left
+                _unmaximize_window(wid)  # so geometry can be applied (full height, right half)
+                time.sleep(0.1)
                 _position_livi_window(wid, eff_w, eff_h)
-                time.sleep(0.2)
-                _position_livi_window(wid, eff_w, eff_h)
-                _set_livi_stays_above(wid)
+                _set_overlay_window_flags(wid)  # skip taskbar, skip pager
+                _set_livi_stays_above(wid)  # above + remove title bar (borderless like Steam Link)
+                time.sleep(0.15)
+                _position_livi_window(wid, eff_w, eff_h)  # re-apply after decoration change
                 _raise_livi_window(wid)
                 for _ in range(10):
                     time.sleep(1.0)
                     w = _get_livi_window_id()
                     if w:
                         _position_livi_window(w, eff_w, eff_h)
+                        _unmaximize_window(w)
                         _set_overlay_window_flags(w)
                         _set_livi_stays_above(w)
                         _raise_livi_window(w)
@@ -627,8 +641,9 @@ class MainWindow(QMainWindow):
             return
         eff_w = getattr(self, "_effective_width", 2560)
         eff_h = getattr(self, "_effective_height", 720)
-        _set_livi_stays_above(wid)
+        _unmaximize_window(wid)
         _position_livi_window(wid, eff_w, eff_h)
+        _set_livi_stays_above(wid)
         _raise_livi_window(wid)
 
     def focusInEvent(self, event):
