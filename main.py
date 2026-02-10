@@ -151,11 +151,14 @@ def _get_livi_window_id() -> str | None:
 
 
 def _livi_right_geom(effective_width: int, effective_height: int) -> str:
-    """wmctrl -e format: gravity,x,y,width,height. Right half, leaving sidebar (88px) visible."""
-    x = effective_width // 2
-    w = (effective_width // 2) - _LIVI_SIDEBAR_WIDTH
-    h = effective_height
-    return f"0,{x},0,{w},{h}"
+    """wmctrl -e format: gravity,x,y,width,height.
+    LIVI width = distance from screen center to left edge of sidebar (so sidebar stays visible).
+    LIVI height = full screen height (top to bottom).
+    """
+    center_x = effective_width // 2
+    livi_width = center_x - _LIVI_SIDEBAR_WIDTH  # center to sidebar left edge
+    livi_height = effective_height  # full screen height
+    return f"0,{center_x},0,{livi_width},{livi_height}"
 
 
 def _unmaximize_window(wmctrl_window_id: str) -> None:
@@ -184,7 +187,7 @@ def _position_livi_window(wmctrl_window_id: str, effective_width: int, effective
 
 
 def _position_livi_window_xdotool(effective_width: int, effective_height: int) -> bool:
-    """Position LIVI using xdotool (fallback when wmctrl doesn't work, e.g. some WMs). Returns True if a window was moved."""
+    """Position LIVI using xdotool (fallback). Width = center to sidebar left; height = full screen."""
     x = effective_width // 2
     y = 0
     w = (effective_width // 2) - _LIVI_SIDEBAR_WIDTH
@@ -532,14 +535,20 @@ def _set_overlay_mode(main_window: "MainWindow", on: bool) -> None:
 
 
 def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
-    """Launch LIVI (CarPlay), position it over the right side (not covering the sidebar), raise it. App stays fullscreen."""
+    """Launch LIVI (CarPlay), position it over the right side (not covering the sidebar), full height, no title bar."""
     if not _launch_livi(get_app_dir(), main_window.config):
         return
     _set_overlay_mode(main_window, True)
     main_window.throttle_page(True)  # Reduce our CPU use so CarPlay audio doesn't skip
 
-    eff_w = getattr(main_window, "_effective_width", 2560)
-    eff_h = getattr(main_window, "_effective_height", 720)
+    # Use actual screen size so LIVI gets full width/height (center-to-sidebar width, top-to-bottom height)
+    app = QApplication.instance()
+    if app and app.primaryScreen():
+        r = app.primaryScreen().geometry()
+        eff_w, eff_h = r.width(), r.height()
+    else:
+        eff_w = getattr(main_window, "_effective_width", 2560)
+        eff_h = getattr(main_window, "_effective_height", 720)
 
     def run():
         for _ in range(50):
@@ -548,16 +557,20 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
             if wid:
                 _unmaximize_window(wid)
                 time.sleep(0.1)
-                _remove_window_decorations(wid)
+                _remove_window_decorations(wid)  # no title bar so height = full screen
                 _position_livi_window(wid, eff_w, eff_h)
                 _position_livi_window_xdotool(eff_w, eff_h)
                 _set_overlay_window_flags(wid)
                 _set_livi_stays_above(wid)
-                time.sleep(0.25)
-                _position_livi_window(wid, eff_w, eff_h)  # one re-apply after decoration change
+                time.sleep(0.3)
+                _position_livi_window(wid, eff_w, eff_h)  # re-apply after decoration change
                 _position_livi_window_xdotool(eff_w, eff_h)
                 _raise_livi_window(wid)
-                # Keep LIVI on top for a bit without constantly resizing (avoids bending/flicker)
+                time.sleep(0.6)  # let window settle then force size again (WM sometimes applies late)
+                _position_livi_window(wid, eff_w, eff_h)
+                _position_livi_window_xdotool(eff_w, eff_h)
+                _raise_livi_window(wid)
+                # Keep LIVI on top without constantly resizing
                 for _ in range(8):
                     time.sleep(1.0)
                     w = _get_livi_window_id()
