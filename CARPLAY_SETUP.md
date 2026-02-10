@@ -40,10 +40,11 @@ This guide covers two ways to get CarPlay on the right half of the Sambar HUD di
      Then unplug and replug the dongle (or reboot).
 
 3. **Window positioning (optional)**
-   - Sambar HUD will auto-launch LIVI and place its window on the right half (leaving the sidebar visible). Install `wmctrl` if the window doesn't move:
+   - Sambar HUD will auto-launch LIVI and place its window on the right half (leaving the sidebar visible). Install `wmctrl` (and optionally `xdotool`) if the window doesn't move:
      ```bash
-     sudo apt install wmctrl
+     sudo apt install wmctrl xdotool
      ```
+   - **On Wayland (e.g. KDE/Plasma):** wmctrl and xdotool only work with X11 windows. Sambar HUD automatically launches LIVI with `--ozone-platform=x11` so it runs under XWayland; then wmctrl can see and position the LIVI window. If positioning still fails, try logging in with an **X11 session** (e.g. "Plasma (X11)") instead of Wayland.
 
 4. **Config (optional)**
    - In `config.yaml`, under `carplay`, you can set:

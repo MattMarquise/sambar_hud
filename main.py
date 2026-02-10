@@ -484,9 +484,13 @@ def _launch_livi(app_dir: str, config: "Config") -> bool:
             path_parts.append(d)
     path_parts.append(env.get("PATH", ""))
     env["PATH"] = os.pathsep.join(path_parts)
+    # On Wayland, run LIVI under X11 (XWayland) so wmctrl can see and position its window
+    livi_args = [exe, "--no-sandbox"]
+    if os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland":
+        livi_args.append("--ozone-platform=x11")
     try:
         subprocess.Popen(
-            [exe, "--no-sandbox"],
+            livi_args,
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
