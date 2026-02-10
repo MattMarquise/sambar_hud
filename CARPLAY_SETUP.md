@@ -50,17 +50,20 @@ This guide covers two ways to get CarPlay on the right half of the Sambar HUD di
      - **New rule** → **Window class** (or **Window class (application)**) **contains** `livi` (or `LIVI`; check with `wmctrl -l -x` for the exact class).
      - Under **Appearance & Fixes**: enable **No border**.
      - Optionally under **Size & Position**: set **Size** to the right-half size (e.g. 960×576 for 2048×576) and **Position** to the right half (e.g. 1088,0). Save and close. Restart Sambar HUD so LIVI gets the rule.
-   - **Reliable alternative (Wayland / DreamQuest): run Sambar HUD under X11 and embed LIVI**  
-     When the app runs under X11, Sambar HUD **embeds** the LIVI window inside its own window on the right half. You get correct size and no title bar without relying on wmctrl or KWin rules. From a terminal:
+   - **Run LIVI in a frame (recommended on Wayland / DreamQuest)**  
+     Sambar HUD can run LIVI inside a **Xephyr** “frame”: a nested X server exactly the size of the right half. LIVI then runs full-size inside that frame, so there is no separate floating window or menu placement—only one frame window to position. Install Xephyr and wmctrl:
      ```bash
-     QT_QPA_PLATFORM=xcb python main.py
+     sudo apt install xserver-xephyr wmctrl xdotool
      ```
-     Or set `QT_QPA_PLATFORM=xcb` in your launcher or startup script. LIVI is still launched with X11 (it already uses `--ozone-platform=x11` on Wayland), so both the HUD and LIVI are X11 and embedding works. If the embedded window appears frozen (rare), use the KWin rule or an X11 session instead.
+     By default `carplay.livi_use_xephyr` is **true**. The frame is placed on the right half and made borderless; LIVI opens inside it. If you don’t have Xephyr or want the old behavior, set in `config.yaml`: `carplay: { livi_use_xephyr: false }`.
+   - **Alternative: run Sambar HUD under X11 and embed LIVI**  
+     When the app runs under X11, Sambar HUD can **embed** the LIVI window in its own right half. From a terminal: `QT_QPA_PLATFORM=xcb python main.py`. If the embedded window appears frozen, use the Xephyr frame or a KWin rule instead.
 
 4. **Config (optional)**
    - In `config.yaml`, under `carplay`, you can set:
      - `livi_appimage_path: ~/LIVI/pi-carplay-4.1.2-x86_64.AppImage` (or your exact path) if auto-detect doesn't find it.
      - `livi_auto_launch: false` to disable auto-starting LIVI on boot.
+     - `livi_use_xephyr: true` (default) to run LIVI in a Xephyr frame; set to `false` to use the previous window-positioning method.
 
 Sambar HUD will look for an AppImage in `~/LIVI/` by architecture (x86_64 on PC, arm64 on Pi). No need to edit code.
 

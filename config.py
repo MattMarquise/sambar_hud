@@ -25,7 +25,8 @@ class Config:
                 'enabled': True,
                 'port': 8080,
                 'auto_connect': True,
-                'livi_auto_launch': True  # Auto-open LIVI on startup and position on right half (Pi)
+                'livi_auto_launch': True,  # Auto-open LIVI on startup and position on right half (Pi)
+                'livi_use_xephyr': True,   # Run LIVI in a Xephyr frame (right-half size); no floating window
             },
             'entertainment': {
                 'steam_link_enabled': True,

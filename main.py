@@ -59,6 +59,10 @@ def get_effective_screen_size(desired_width: int, desired_height: int, fit_to_sc
 _xephyr_pid = None
 _steamlink_pid = None
 
+# PIDs for LIVI when run in Xephyr frame (so we can kill the frame on exit)
+_livi_xephyr_pid = None
+_livi_pid = None
+
 
 def stop_steam_link_session() -> None:
     """Kill Steam Link and (if used) the Xephyr server so the left half shows the HUD again."""
@@ -192,7 +196,7 @@ def _position_livi_window_xdotool(effective_width: int, effective_height: int) -
     y = 0
     w = (effective_width // 2) - _LIVI_SIDEBAR_WIDTH
     h = effective_height
-    for name in ["LIVI", "CarPlay", "livi", "pi-carplay"]:
+    for name in ["SambarLIVI", "LIVI", "CarPlay", "livi", "pi-carplay"]:
         try:
             out = subprocess.run(
                 ["xdotool", "search", "--name", name],
@@ -549,6 +553,108 @@ def _launch_livi(app_dir: str, config: "Config") -> bool:
         return False
 
 
+def _get_window_id_by_title(title_substring: str) -> str | None:
+    """Return wmctrl window id (hex string) for the first window whose title contains the given string, or None."""
+    try:
+        out = subprocess.run(
+            ["wmctrl", "-l"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if out.returncode != 0:
+            return None
+        for line in out.stdout.splitlines():
+            parts = line.split(None, 2)
+            if len(parts) < 3:
+                continue
+            wid, _desk, title = parts[0], parts[1], parts[2]
+            if title_substring in title:
+                return wid
+        return None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+def _launch_livi_via_xephyr(
+    app_dir: str, config: "Config", eff_w: int, eff_h: int, main_window: "MainWindow"
+) -> bool:
+    """
+    Run LIVI inside a dedicated Xephyr 'frame' (nested X server) sized to the right half.
+    We only position that one frame; LIVI runs full-size inside it so no separate window or menu placement.
+    Returns True if Xephyr was started (LIVI is launched in the background thread).
+    """
+    global _livi_xephyr_pid, _livi_pid
+    exe = _find_livi_appimage(config)
+    if not exe:
+        return False
+    _kill_other_livi_processes()
+    livi_w = (eff_w // 2) - _LIVI_SIDEBAR_WIDTH
+    livi_h = eff_h
+    display_num = 98
+    xephyr_display = f":{display_num}"
+    title = "SambarLIVI"
+    try:
+        proc = subprocess.Popen(
+            [
+                "Xephyr",
+                xephyr_display,
+                "-screen", f"{livi_w}x{livi_h}",
+                "-title", title,
+                "-br",
+                "-ac",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _livi_xephyr_pid = proc.pid
+    except FileNotFoundError:
+        return False
+
+    def run():
+        global _livi_pid
+        time.sleep(2)
+        wid = _get_window_id_by_title(title)
+        if wid:
+            _unmaximize_window(wid)
+            time.sleep(0.1)
+            _remove_window_decorations(wid)
+            _position_livi_window(wid, eff_w, eff_h)
+            _position_livi_window_xdotool(eff_w, eff_h)
+            _set_overlay_window_flags(wid)
+            _set_livi_stays_above(wid)
+            _raise_livi_window(wid)
+            for w in QApplication.topLevelWidgets():
+                if type(w).__name__ == "MainWindow":
+                    QTimer.singleShot(0, lambda mw=w: _set_overlay_mode(mw, True))
+                    break
+        env = os.environ.copy()
+        scripts_dir = os.path.join(get_app_dir(), "scripts")
+        path_parts = [scripts_dir] if os.path.isdir(scripts_dir) else []
+        for d in ("/usr/local/bin", "/usr/bin", "/bin"):
+            if os.path.isdir(d):
+                path_parts.append(d)
+        path_parts.append(env.get("PATH", ""))
+        env["PATH"] = os.pathsep.join(path_parts)
+        env["DISPLAY"] = xephyr_display
+        try:
+            p = subprocess.Popen(
+                [exe, "--no-sandbox"],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=os.path.dirname(exe),
+                start_new_session=True,
+            )
+            _livi_pid = p.pid
+        except (FileNotFoundError, PermissionError):
+            pass
+
+    threading.Thread(target=run, daemon=True).start()
+    return True
+
+
 def _set_overlay_mode(main_window: "MainWindow", on: bool) -> None:
     """When on: remove StaysOnTop so Steam Link / CarPlay windows can display over our app. When off: restore StaysOnTop."""
     if main_window is None:
@@ -565,12 +671,6 @@ def _set_overlay_mode(main_window: "MainWindow", on: bool) -> None:
 
 def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
     """Launch LIVI (CarPlay), position it over the right side (not covering the sidebar), full height, no title bar."""
-    if not _launch_livi(get_app_dir(), main_window.config):
-        return
-    _set_overlay_mode(main_window, True)
-    main_window.throttle_page(True)  # Reduce our CPU use so CarPlay audio doesn't skip
-
-    # Use actual screen size so LIVI gets full width/height (center-to-sidebar width, top-to-bottom height)
     app = QApplication.instance()
     if app and app.primaryScreen():
         r = app.primaryScreen().geometry()
@@ -578,6 +678,18 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
     else:
         eff_w = getattr(main_window, "_effective_width", 2560)
         eff_h = getattr(main_window, "_effective_height", 720)
+
+    # Prefer running LIVI inside a Xephyr frame (one window to position; LIVI fills the frame)
+    use_xephyr = main_window.config.get("carplay.livi_use_xephyr", True)
+    if use_xephyr and _launch_livi_via_xephyr(get_app_dir(), main_window.config, eff_w, eff_h, main_window):
+        _set_overlay_mode(main_window, True)
+        main_window.throttle_page(True)
+        return
+
+    if not _launch_livi(get_app_dir(), main_window.config):
+        return
+    _set_overlay_mode(main_window, True)
+    main_window.throttle_page(True)  # Reduce our CPU use so CarPlay audio doesn't skip
 
     def run():
         use_embed = False
