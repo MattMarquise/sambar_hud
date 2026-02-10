@@ -55,9 +55,10 @@ This guide covers two ways to get CarPlay on the right half of the Sambar HUD di
      ```bash
      sudo apt install xserver-xephyr wmctrl xdotool
      ```
-     By default `carplay.livi_use_xephyr` is **true**. The frame is placed on the right half and made borderless; LIVI opens inside it. If you don’t have Xephyr or want the old behavior, set in `config.yaml`: `carplay: { livi_use_xephyr: false }`.
+     By default `carplay.livi_use_xephyr` is **true**. The frame is placed on the right half and made borderless; LIVI is launched with DISPLAY set to the Xephyr and --ozone-platform=x11 so it opens inside the frame (on Wayland, otherwise LIVI would open on the host).  If you don’t have Xephyr or want the old behavior, set in `config.yaml`: `carplay: { livi_use_xephyr: false }`.
    - **Alternative: run Sambar HUD under X11 and embed LIVI**  
      When the app runs under X11, Sambar HUD can **embed** the LIVI window in its own right half. From a terminal: `QT_QPA_PLATFORM=xcb python main.py`. If the embedded window appears frozen, use the Xephyr frame or a KWin rule instead.
+   - **Dock or panel covering the CarPlay area** — If the OS dock reserves space and the frame doesn't use full height: auto-hide the panel (e.g. KDE: right-click panel → Configure → Visibility → Auto-hide), or run a minimal session with no taskbar.
 
 4. **Config (optional)**
    - In `config.yaml`, under `carplay`, you can set:

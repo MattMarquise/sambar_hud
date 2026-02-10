@@ -638,9 +638,13 @@ def _launch_livi_via_xephyr(
         path_parts.append(env.get("PATH", ""))
         env["PATH"] = os.pathsep.join(path_parts)
         env["DISPLAY"] = xephyr_display
+        # Force LIVI to use X11 (the Xephyr display); otherwise on Wayland it opens on the host and ignores DISPLAY
+        env.pop("WAYLAND_DISPLAY", None)
+        env.pop("XDG_SESSION_TYPE", None)
+        livi_args = [exe, "--no-sandbox", "--ozone-platform=x11"]
         try:
             p = subprocess.Popen(
-                [exe, "--no-sandbox"],
+                livi_args,
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
