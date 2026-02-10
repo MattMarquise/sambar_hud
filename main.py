@@ -187,7 +187,7 @@ def _position_livi_window(wmctrl_window_id: str, effective_width: int, effective
 
 
 def _position_livi_window_xdotool(effective_width: int, effective_height: int) -> bool:
-    """Position LIVI using xdotool (fallback). Width = center to sidebar left; height = full screen."""
+    """Position LIVI using xdotool. Activate window first, then move and resize (full right-half height/width)."""
     x = effective_width // 2
     y = 0
     w = (effective_width // 2) - _LIVI_SIDEBAR_WIDTH
@@ -203,8 +203,9 @@ def _position_livi_window_xdotool(effective_width: int, effective_height: int) -
             if out.returncode != 0 or not out.stdout.strip():
                 continue
             wid = out.stdout.splitlines()[0].strip()
-            subprocess.run(["xdotool", "windowmove", wid, str(x), str(y)], capture_output=True, timeout=2)
-            subprocess.run(["xdotool", "windowsize", wid, str(w), str(h)], capture_output=True, timeout=2)
+            subprocess.run(["xdotool", "windowactivate", "--sync", wid], capture_output=True, timeout=2)
+            subprocess.run(["xdotool", "windowmove", "--sync", wid, str(x), str(y)], capture_output=True, timeout=2)
+            subprocess.run(["xdotool", "windowsize", "--sync", wid, str(w), str(h)], capture_output=True, timeout=2)
             return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
@@ -566,12 +567,30 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
                 _position_livi_window(wid, eff_w, eff_h)  # re-apply after decoration change
                 _position_livi_window_xdotool(eff_w, eff_h)
                 _raise_livi_window(wid)
-                time.sleep(0.6)  # let window settle then force size again (WM sometimes applies late)
+                time.sleep(0.6)  # let window settle then force size again
                 _position_livi_window(wid, eff_w, eff_h)
                 _position_livi_window_xdotool(eff_w, eff_h)
+                _remove_window_decorations(wid)
                 _raise_livi_window(wid)
+                # Delayed re-apply so full height/width and no title bar stick (KDE/WM sometimes apply late)
+                time.sleep(1.0)
+                w = _get_livi_window_id()
+                if w:
+                    _position_livi_window(w, eff_w, eff_h)
+                    _position_livi_window_xdotool(eff_w, eff_h)
+                    _remove_window_decorations(w)
+                    _set_livi_stays_above(w)
+                    _raise_livi_window(w)
+                time.sleep(1.0)
+                w = _get_livi_window_id()
+                if w:
+                    _position_livi_window(w, eff_w, eff_h)
+                    _position_livi_window_xdotool(eff_w, eff_h)
+                    _remove_window_decorations(w)
+                    _set_livi_stays_above(w)
+                    _raise_livi_window(w)
                 # Keep LIVI on top without constantly resizing
-                for _ in range(8):
+                for _ in range(6):
                     time.sleep(1.0)
                     w = _get_livi_window_id()
                     if w:

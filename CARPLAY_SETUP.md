@@ -45,6 +45,11 @@ This guide covers two ways to get CarPlay on the right half of the Sambar HUD di
      sudo apt install wmctrl xdotool
      ```
    - **On Wayland (e.g. KDE/Plasma):** wmctrl and xdotool only work with X11 windows. Sambar HUD automatically launches LIVI with `--ozone-platform=x11` so it runs under XWayland; then wmctrl can see and position the LIVI window. If positioning still fails, try logging in with an **X11 session** (e.g. "Plasma (X11)") instead of Wayland.
+   - **KDE / DreamQuest: LIVI still has title bar or wrong size:** KWin sometimes ignores `_MOTIF_WM_HINTS` for XWayland windows. Add a **window rule** so LIVI is borderless and (optionally) forced size:
+     - Open **System Settings → Window Management → Window Rules**.
+     - **New rule** → **Window class** (or **Window class (application)**) **contains** `livi` (or `LIVI`; check with `wmctrl -l -x` for the exact class).
+     - Under **Appearance & Fixes**: enable **No border**.
+     - Optionally under **Size & Position**: set **Size** to the right-half size (e.g. 960×576 for 2048×576) and **Position** to the right half (e.g. 1088,0). Save and close. Restart Sambar HUD so LIVI gets the rule.
 
 4. **Config (optional)**
    - In `config.yaml`, under `carplay`, you can set:
