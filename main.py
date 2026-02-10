@@ -109,7 +109,8 @@ _LIVI_SIDEBAR_WIDTH = 88
 
 
 def _get_livi_window_id() -> str | None:
-    """Return wmctrl window id for LIVI (CarPlay) window, or None."""
+    """Return wmctrl window id for LIVI (CarPlay) window, or None. Tries title and WM_CLASS."""
+    # Try wmctrl -l (title only)
     try:
         out = subprocess.run(
             ["wmctrl", "-l"],
@@ -117,18 +118,36 @@ def _get_livi_window_id() -> str | None:
             text=True,
             timeout=2,
         )
-        if out.returncode != 0:
-            return None
-        for line in out.stdout.splitlines():
-            parts = line.split(None, 2)
-            if len(parts) < 3:
-                continue
-            wid, _desk, title = parts[0], parts[1], parts[2]
-            if "LIVI" in title or "livi" in title.lower() or "CarPlay" in title:
-                return wid
-        return None
+        if out.returncode == 0:
+            for line in out.stdout.splitlines():
+                parts = line.split(None, 2)
+                if len(parts) < 3:
+                    continue
+                wid, _desk, title = parts[0], parts[1], parts[2]
+                if "LIVI" in title or "livi" in title.lower() or "CarPlay" in title:
+                    return wid
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
+        pass
+    # Try wmctrl -l -x (WM_CLASS) for Electron/LIVI
+    try:
+        out = subprocess.run(
+            ["wmctrl", "-l", "-x"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if out.returncode == 0:
+            for line in out.stdout.splitlines():
+                parts = line.split(None, 3)
+                if len(parts) < 4:
+                    continue
+                wid = parts[0]
+                rest = line.lower()
+                if "livi" in rest or "carplay" in rest or "electron" in rest:
+                    return wid
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
 
 
 def _livi_right_geom(effective_width: int, effective_height: int) -> str:
@@ -162,6 +181,31 @@ def _position_livi_window(wmctrl_window_id: str, effective_width: int, effective
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
+
+
+def _position_livi_window_xdotool(effective_width: int, effective_height: int) -> bool:
+    """Position LIVI using xdotool (fallback when wmctrl doesn't work, e.g. some WMs). Returns True if a window was moved."""
+    x = effective_width // 2
+    y = 0
+    w = (effective_width // 2) - _LIVI_SIDEBAR_WIDTH
+    h = effective_height
+    for name in ["LIVI", "CarPlay", "livi", "pi-carplay"]:
+        try:
+            out = subprocess.run(
+                ["xdotool", "search", "--name", name],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if out.returncode != 0 or not out.stdout.strip():
+                continue
+            wid = out.stdout.splitlines()[0].strip()
+            subprocess.run(["xdotool", "windowmove", wid, str(x), str(y)], capture_output=True, timeout=2)
+            subprocess.run(["xdotool", "windowsize", wid, str(w), str(h)], capture_output=True, timeout=2)
+            return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    return False
 
 
 def _raise_livi_window(wmctrl_window_id: str) -> None:
@@ -486,16 +530,19 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
                 _unmaximize_window(wid)  # so geometry can be applied (full height, right half)
                 time.sleep(0.1)
                 _position_livi_window(wid, eff_w, eff_h)
+                _position_livi_window_xdotool(eff_w, eff_h)  # fallback when wmctrl is ignored (e.g. KDE/Wayland)
                 _set_overlay_window_flags(wid)  # skip taskbar, skip pager
                 _set_livi_stays_above(wid)  # above + remove title bar (borderless like Steam Link)
                 time.sleep(0.15)
                 _position_livi_window(wid, eff_w, eff_h)  # re-apply after decoration change
+                _position_livi_window_xdotool(eff_w, eff_h)
                 _raise_livi_window(wid)
                 for _ in range(10):
                     time.sleep(1.0)
                     w = _get_livi_window_id()
                     if w:
                         _position_livi_window(w, eff_w, eff_h)
+                        _position_livi_window_xdotool(eff_w, eff_h)
                         _unmaximize_window(w)
                         _set_overlay_window_flags(w)
                         _set_livi_stays_above(w)
@@ -643,6 +690,7 @@ class MainWindow(QMainWindow):
         eff_h = getattr(self, "_effective_height", 720)
         _unmaximize_window(wid)
         _position_livi_window(wid, eff_w, eff_h)
+        _position_livi_window_xdotool(eff_w, eff_h)
         _set_livi_stays_above(wid)
         _raise_livi_window(wid)
 
