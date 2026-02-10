@@ -50,6 +50,12 @@ This guide covers two ways to get CarPlay on the right half of the Sambar HUD di
      - **New rule** → **Window class** (or **Window class (application)**) **contains** `livi` (or `LIVI`; check with `wmctrl -l -x` for the exact class).
      - Under **Appearance & Fixes**: enable **No border**.
      - Optionally under **Size & Position**: set **Size** to the right-half size (e.g. 960×576 for 2048×576) and **Position** to the right half (e.g. 1088,0). Save and close. Restart Sambar HUD so LIVI gets the rule.
+   - **Reliable alternative (Wayland / DreamQuest): run Sambar HUD under X11 and embed LIVI**  
+     When the app runs under X11, Sambar HUD **embeds** the LIVI window inside its own window on the right half. You get correct size and no title bar without relying on wmctrl or KWin rules. From a terminal:
+     ```bash
+     QT_QPA_PLATFORM=xcb python main.py
+     ```
+     Or set `QT_QPA_PLATFORM=xcb` in your launcher or startup script. LIVI is still launched with X11 (it already uses `--ozone-platform=x11` on Wayland), so both the HUD and LIVI are X11 and embedding works. If the embedded window appears frozen (rare), use the KWin rule or an X11 session instead.
 
 4. **Config (optional)**
    - In `config.yaml`, under `carplay`, you can set:

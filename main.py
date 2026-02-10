@@ -15,9 +15,9 @@ import threading
 import time
 
 try:
-    from PyQt6.QtWidgets import QApplication, QMainWindow
+    from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
     from PyQt6.QtCore import Qt, QUrl, QTimer
-    from PyQt6.QtGui import QShortcut, QKeySequence
+    from PyQt6.QtGui import QShortcut, QKeySequence, QGuiApplication
     from PyQt6.QtWebEngineWidgets import QWebEngineView
     from PyQt6.QtWebEngineCore import QWebEnginePage
 except ImportError as e:
@@ -280,6 +280,34 @@ def _set_livi_stays_above(wmctrl_window_id: str) -> None:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     _remove_window_decorations(wmctrl_window_id)
+
+
+def _embed_livi_in_main_window(main_window: "MainWindow", wmctrl_window_id: str) -> bool:
+    """
+    Embed the LIVI X11 window into our main window (right half). Only works when Qt platform is xcb (X11).
+    Returns True if embedding was done, False if skipped or failed.
+    """
+    if not getattr(main_window, "_livi_embed_holder", None):
+        return False
+    try:
+        wid_int = int(wmctrl_window_id, 16)
+    except (ValueError, TypeError):
+        return False
+    try:
+        from PyQt6.QtGui import QWindow
+        foreign = QWindow.fromWinId(wid_int)
+        if not foreign:
+            return False
+        container = QWidget.createWindowContainer(foreign, main_window._livi_embed_holder)
+        if not container:
+            return False
+        holder = main_window._livi_embed_holder
+        container.setGeometry(0, 0, holder.width(), holder.height())
+        main_window._livi_embed_holder.show()
+        main_window._livi_embedded = True
+        return True
+    except Exception:
+        return False
 
 
 def _set_livi_vertical_maximize(wmctrl_window_id: str) -> None:
@@ -552,51 +580,58 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
         eff_h = getattr(main_window, "_effective_height", 720)
 
     def run():
+        use_embed = False
+        gui = QGuiApplication.instance()
+        if gui and gui.platformName() == "xcb":
+            use_embed = True
         for _ in range(50):
             time.sleep(0.4)
             wid = _get_livi_window_id()
-            if wid:
-                _unmaximize_window(wid)
-                time.sleep(0.1)
-                _remove_window_decorations(wid)  # no title bar so height = full screen
-                _position_livi_window(wid, eff_w, eff_h)
-                _position_livi_window_xdotool(eff_w, eff_h)
-                _set_overlay_window_flags(wid)
-                _set_livi_stays_above(wid)
-                time.sleep(0.3)
-                _position_livi_window(wid, eff_w, eff_h)  # re-apply after decoration change
-                _position_livi_window_xdotool(eff_w, eff_h)
-                _raise_livi_window(wid)
-                time.sleep(0.6)  # let window settle then force size again
-                _position_livi_window(wid, eff_w, eff_h)
-                _position_livi_window_xdotool(eff_w, eff_h)
-                _remove_window_decorations(wid)
-                _raise_livi_window(wid)
-                # Delayed re-apply so full height/width and no title bar stick (KDE/WM sometimes apply late)
-                time.sleep(1.0)
-                w = _get_livi_window_id()
-                if w:
-                    _position_livi_window(w, eff_w, eff_h)
-                    _position_livi_window_xdotool(eff_w, eff_h)
-                    _remove_window_decorations(w)
-                    _set_livi_stays_above(w)
-                    _raise_livi_window(w)
-                time.sleep(1.0)
-                w = _get_livi_window_id()
-                if w:
-                    _position_livi_window(w, eff_w, eff_h)
-                    _position_livi_window_xdotool(eff_w, eff_h)
-                    _remove_window_decorations(w)
-                    _set_livi_stays_above(w)
-                    _raise_livi_window(w)
-                # Keep LIVI on top without constantly resizing
-                for _ in range(6):
-                    time.sleep(1.0)
-                    w = _get_livi_window_id()
-                    if w:
-                        _set_livi_stays_above(w)
-                        _raise_livi_window(w)
+            if not wid:
+                continue
+            if use_embed:
+                # Embed LIVI inside our window (X11 only): no WM positioning, full control of size and no title bar
+                QTimer.singleShot(0, lambda mw=main_window, w=wid: _embed_livi_in_main_window(mw, w))
                 break
+            _unmaximize_window(wid)
+            time.sleep(0.1)
+            _remove_window_decorations(wid)
+            _position_livi_window(wid, eff_w, eff_h)
+            _position_livi_window_xdotool(eff_w, eff_h)
+            _set_overlay_window_flags(wid)
+            _set_livi_stays_above(wid)
+            time.sleep(0.3)
+            _position_livi_window(wid, eff_w, eff_h)
+            _position_livi_window_xdotool(eff_w, eff_h)
+            _raise_livi_window(wid)
+            time.sleep(0.6)
+            _position_livi_window(wid, eff_w, eff_h)
+            _position_livi_window_xdotool(eff_w, eff_h)
+            _remove_window_decorations(wid)
+            _raise_livi_window(wid)
+            time.sleep(1.0)
+            w = _get_livi_window_id()
+            if w:
+                _position_livi_window(w, eff_w, eff_h)
+                _position_livi_window_xdotool(eff_w, eff_h)
+                _remove_window_decorations(w)
+                _set_livi_stays_above(w)
+                _raise_livi_window(w)
+            time.sleep(1.0)
+            w = _get_livi_window_id()
+            if w:
+                _position_livi_window(w, eff_w, eff_h)
+                _position_livi_window_xdotool(eff_w, eff_h)
+                _remove_window_decorations(w)
+                _set_livi_stays_above(w)
+                _raise_livi_window(w)
+            for _ in range(6):
+                time.sleep(1.0)
+                w = _get_livi_window_id()
+                if w:
+                    _set_livi_stays_above(w)
+                    _raise_livi_window(w)
+            break
     threading.Thread(target=run, daemon=True).start()
 
 
@@ -649,6 +684,7 @@ class MainWindow(QMainWindow):
         self.config = Config()
         self.hud_url = None
         self.view = None
+        self._livi_embedded = False
         self.init_ui()
 
     def init_ui(self):
@@ -682,10 +718,16 @@ class MainWindow(QMainWindow):
 
         self.hud_url = QUrl.fromLocalFile(index_path)
 
+        # Central container: full-size HUD view + right-half placeholder for embedded LIVI (X11 only)
+        central = QWidget(self)
+        central.setFixedSize(self._effective_width, self._effective_height)
+        ew, eh = self._effective_width, self._effective_height
+
         from PyQt6.QtWebEngineCore import QWebEngineProfile
         profile = QWebEngineProfile.defaultProfile()
         page = SambarWebPage(profile, app_dir, self)
-        self.view = QWebEngineView(self)
+        self.view = QWebEngineView(central)
+        self.view.setGeometry(0, 0, ew, eh)
         self.view.setPage(page)
         try:
             from PyQt6.QtWebEngineCore import QWebEngineSettings
@@ -701,7 +743,12 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self.view.setUrl(self.hud_url)
-        self.setCentralWidget(self.view)
+
+        self._livi_embed_holder = QWidget(central)
+        self._livi_embed_holder.setGeometry(ew // 2, 0, ew // 2 - _LIVI_SIDEBAR_WIDTH, eh)
+        self._livi_embed_holder.hide()
+
+        self.setCentralWidget(central)
         self.setWindowTitle("Sambar HUD")
         self._apply_hud_zoom()
         self.view.loadFinished.connect(self._apply_hud_zoom)
@@ -732,6 +779,8 @@ class MainWindow(QMainWindow):
 
     def _keep_livi_on_top_if_shown(self) -> None:
         """When our window gets focus (e.g. user tapped left), keep LIVI on top on the right so it doesn't disappear."""
+        if getattr(self, "_livi_embedded", False):
+            return  # LIVI is embedded; no separate window to raise
         wid = _get_livi_window_id()
         if wid is None:
             return
