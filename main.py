@@ -249,8 +249,24 @@ def _set_overlay_window_flags(wmctrl_window_id: str) -> None:
         pass
 
 
+def _remove_window_decorations(wmctrl_window_id: str) -> None:
+    """Remove window title bar/decorations (borderless) via _MOTIF_WM_HINTS. Call early so geometry uses full height."""
+    try:
+        try:
+            dec_id = str(int(wmctrl_window_id, 16))
+        except ValueError:
+            dec_id = wmctrl_window_id
+        subprocess.run(
+            ["xprop", "-id", dec_id, "-f", "_MOTIF_WM_HINTS", "32c", "-set", "_MOTIF_WM_HINTS", "2", "0", "0", "0", "0", "0", "0", "0", "0"],
+            capture_output=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+
 def _set_livi_stays_above(wmctrl_window_id: str) -> None:
-    """Keep LIVI window above our HUD so it doesn't disappear when user taps the left side."""
+    """Keep LIVI window above our HUD; remove title bar so it looks borderless."""
     try:
         subprocess.run(
             ["wmctrl", "-i", "-r", wmctrl_window_id, "-b", "add,above"],
@@ -259,15 +275,14 @@ def _set_livi_stays_above(wmctrl_window_id: str) -> None:
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
-    # Remove window decorations (title bar) so it looks borderless over our app
+    _remove_window_decorations(wmctrl_window_id)
+
+
+def _set_livi_vertical_maximize(wmctrl_window_id: str) -> None:
+    """Ask WM to maximize LIVI vertically only so it fills top-to-bottom (full height)."""
     try:
-        # xprop -id expects decimal; wmctrl gives hex (0x02e00003)
-        try:
-            dec_id = str(int(wmctrl_window_id, 16))
-        except ValueError:
-            dec_id = wmctrl_window_id
         subprocess.run(
-            ["xprop", "-id", dec_id, "-f", "_MOTIF_WM_HINTS", "32c", "-set", "_MOTIF_WM_HINTS", "2", "0", "0", "0", "0", "0", "0", "0", "0"],
+            ["wmctrl", "-i", "-r", wmctrl_window_id, "-b", "add,maximized_vert"],
             capture_output=True,
             timeout=2,
         )
@@ -531,14 +546,21 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
             time.sleep(0.4)
             wid = _get_livi_window_id()
             if wid:
-                _unmaximize_window(wid)  # so geometry can be applied (full height, right half)
+                _unmaximize_window(wid)
+                time.sleep(0.08)
+                _remove_window_decorations(wid)  # remove title bar first so resize uses full height
                 time.sleep(0.1)
+                _remove_window_decorations(wid)  # some WMs need a second nudge
                 _position_livi_window(wid, eff_w, eff_h)
-                _position_livi_window_xdotool(eff_w, eff_h)  # fallback when wmctrl is ignored (e.g. KDE/Wayland)
-                _set_overlay_window_flags(wid)  # skip taskbar, skip pager
-                _set_livi_stays_above(wid)  # above + remove title bar (borderless like Steam Link)
+                _position_livi_window_xdotool(eff_w, eff_h)
+                _set_overlay_window_flags(wid)
+                _set_livi_stays_above(wid)  # above + decorations again
                 time.sleep(0.15)
-                _position_livi_window(wid, eff_w, eff_h)  # re-apply after decoration change
+                _position_livi_window(wid, eff_w, eff_h)  # re-apply geometry after decoration change
+                _position_livi_window_xdotool(eff_w, eff_h)
+                _set_livi_vertical_maximize(wid)  # full height top-to-bottom
+                time.sleep(0.1)
+                _position_livi_window(wid, eff_w, eff_h)  # re-apply x/width in case vert maximize shifted it
                 _position_livi_window_xdotool(eff_w, eff_h)
                 _raise_livi_window(wid)
                 for _ in range(10):
@@ -548,8 +570,11 @@ def launch_livi_and_apply_layout(main_window: "MainWindow") -> None:
                         _position_livi_window(w, eff_w, eff_h)
                         _position_livi_window_xdotool(eff_w, eff_h)
                         _unmaximize_window(w)
+                        _remove_window_decorations(w)
                         _set_overlay_window_flags(w)
                         _set_livi_stays_above(w)
+                        _set_livi_vertical_maximize(w)
+                        _position_livi_window(w, eff_w, eff_h)
                         _raise_livi_window(w)
                 break
     threading.Thread(target=run, daemon=True).start()
@@ -695,7 +720,10 @@ class MainWindow(QMainWindow):
         _unmaximize_window(wid)
         _position_livi_window(wid, eff_w, eff_h)
         _position_livi_window_xdotool(eff_w, eff_h)
+        _remove_window_decorations(wid)
         _set_livi_stays_above(wid)
+        _set_livi_vertical_maximize(wid)
+        _position_livi_window(wid, eff_w, eff_h)
         _raise_livi_window(wid)
 
     def focusInEvent(self, event):
