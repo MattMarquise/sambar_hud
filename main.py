@@ -273,6 +273,22 @@ def _remove_window_decorations(wmctrl_window_id: str) -> None:
         pass
 
 
+def _set_window_type_splash(wmctrl_window_id: str) -> None:
+    """Set _NET_WM_WINDOW_TYPE to SPLASH so compositors (e.g. KWin) may draw no title bar."""
+    try:
+        dec_id = str(int(wmctrl_window_id, 16))
+    except ValueError:
+        return
+    try:
+        subprocess.run(
+            ["xprop", "-id", dec_id, "-f", "_NET_WM_WINDOW_TYPE", "32a", "-set", "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_SPLASH"],
+            capture_output=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+
 def _set_livi_stays_above(wmctrl_window_id: str) -> None:
     """Keep LIVI window above our HUD; remove title bar so it looks borderless."""
     try:
@@ -553,14 +569,20 @@ def _launch_livi(app_dir: str, config: "Config") -> bool:
         return False
 
 
-def _get_window_id_by_title(title_substring: str) -> str | None:
-    """Return wmctrl window id (hex string) for the first window whose title contains the given string, or None."""
+def _get_window_id_by_title(title_substring: str, display: str | None = None) -> str | None:
+    """Return wmctrl window id (hex string) for the first window whose title contains the given string, or None.
+    If display is set (e.g. ':98'), run wmctrl on that X display."""
+    env = os.environ.copy() if display else None
+    if display:
+        env = os.environ.copy()
+        env["DISPLAY"] = display
     try:
         out = subprocess.run(
             ["wmctrl", "-l"],
             capture_output=True,
             text=True,
             timeout=2,
+            env=env,
         )
         if out.returncode != 0:
             return None
@@ -574,6 +596,31 @@ def _get_window_id_by_title(title_substring: str) -> str | None:
         return None
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
+
+
+def _set_window_geometry_on_display(wmctrl_window_id: str, x: int, y: int, w: int, h: int, display: str) -> None:
+    """Move and resize a window on the given X display (e.g. :98) using wmctrl -e."""
+    try:
+        geom = f"0,{x},{y},{w},{h}"
+        env = os.environ.copy()
+        env["DISPLAY"] = display
+        subprocess.run(
+            ["wmctrl", "-i", "-r", wmctrl_window_id, "-e", geom],
+            capture_output=True,
+            timeout=2,
+            env=env,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+
+def _make_livi_fullscreen_inside_xephyr(display: str, width: int, height: int) -> None:
+    """Find LIVI's window on the Xephyr display and set it to 0,0,width,height so it fills the frame."""
+    for name in ["LIVI", "CarPlay", "livi", "pi-carplay"]:
+        wid = _get_window_id_by_title(name, display)
+        if wid:
+            _set_window_geometry_on_display(wid, 0, 0, width, height, display)
+            return
 
 
 def _launch_livi_via_xephyr(
@@ -616,19 +663,26 @@ def _launch_livi_via_xephyr(
         global _livi_pid
         time.sleep(2)
         wid = _get_window_id_by_title(title)
+        # Embed the Xephyr frame into our fullscreen window so it isn't limited by the OS panel and has no host title bar
         if wid:
-            _unmaximize_window(wid)
-            time.sleep(0.1)
-            _remove_window_decorations(wid)
-            _position_livi_window(wid, eff_w, eff_h)
-            _position_livi_window_xdotool(eff_w, eff_h)
-            _set_overlay_window_flags(wid)
-            _set_livi_stays_above(wid)
-            _raise_livi_window(wid)
-            for w in QApplication.topLevelWidgets():
-                if type(w).__name__ == "MainWindow":
-                    QTimer.singleShot(0, lambda mw=w: _set_overlay_mode(mw, True))
-                    break
+            QTimer.singleShot(0, lambda mw=main_window, w=wid: _embed_livi_in_main_window(mw, w))
+        for w in QApplication.topLevelWidgets():
+            if type(w).__name__ == "MainWindow":
+                QTimer.singleShot(0, lambda mw=w: _set_overlay_mode(mw, True))
+                break
+        time.sleep(0.6)  # Let embed attempt run on main thread
+        if not getattr(main_window, "_livi_embedded", False):
+            # Embed failed (e.g. Wayland can't embed X11); position Xephyr on host and try to remove title bar
+            if wid:
+                _unmaximize_window(wid)
+                time.sleep(0.1)
+                _remove_window_decorations(wid)
+                _set_window_type_splash(wid)  # KWin often drops title bar for SPLASH
+                _position_livi_window(wid, eff_w, eff_h)
+                _position_livi_window_xdotool(eff_w, eff_h)
+                _set_overlay_window_flags(wid)
+                _set_livi_stays_above(wid)
+                _raise_livi_window(wid)
         env = os.environ.copy()
         scripts_dir = os.path.join(get_app_dir(), "scripts")
         path_parts = [scripts_dir] if os.path.isdir(scripts_dir) else []
@@ -638,7 +692,6 @@ def _launch_livi_via_xephyr(
         path_parts.append(env.get("PATH", ""))
         env["PATH"] = os.pathsep.join(path_parts)
         env["DISPLAY"] = xephyr_display
-        # Force LIVI to use X11 (the Xephyr display); otherwise on Wayland it opens on the host and ignores DISPLAY
         env.pop("WAYLAND_DISPLAY", None)
         env.pop("XDG_SESSION_TYPE", None)
         livi_args = [exe, "--no-sandbox", "--ozone-platform=x11"]
@@ -654,6 +707,11 @@ def _launch_livi_via_xephyr(
             _livi_pid = p.pid
         except (FileNotFoundError, PermissionError):
             pass
+        # Make LIVI's window inside the Xephyr fill the frame (0,0 to livi_w x livi_h)
+        time.sleep(5)
+        _make_livi_fullscreen_inside_xephyr(xephyr_display, livi_w, livi_h)
+        time.sleep(1)
+        _make_livi_fullscreen_inside_xephyr(xephyr_display, livi_w, livi_h)
 
     threading.Thread(target=run, daemon=True).start()
     return True
