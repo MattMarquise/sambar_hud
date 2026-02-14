@@ -491,6 +491,19 @@ def _launch_steam_link_via_xephyr() -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
+def stop_livi_session() -> None:
+    """Kill LIVI and its Xephyr frame (if used) when quitting or powering off."""
+    global _livi_pid, _livi_xephyr_pid
+    for pid, name in [(_livi_pid, "LIVI"), (_livi_xephyr_pid, "Xephyr")]:
+        if pid is not None:
+            try:
+                os.kill(pid, 9)
+            except (ProcessLookupError, PermissionError):
+                pass
+    _livi_pid = None
+    _livi_xephyr_pid = None
+
+
 def _kill_other_livi_processes() -> None:
     """Stop any already-running LIVI/carplay processes (e.g. from autostart) so we can run 4.1.2 only."""
     try:
@@ -921,7 +934,7 @@ class MainWindow(QMainWindow):
         self.view.setUrl(self.hud_url)
 
         self._livi_embed_holder = QWidget(central)
-        self._livi_embed_holder.setGeometry(ew // 2, 0, ew // 2 - _LIVI_SIDEBAR_WIDTH, eh)
+        self._update_embed_holder_geometry(ew, eh)
         self._livi_embed_holder.hide()
 
         self.setCentralWidget(central)
@@ -929,6 +942,30 @@ class MainWindow(QMainWindow):
         self._apply_hud_zoom()
         self.view.loadFinished.connect(self._apply_hud_zoom)
         self._install_quit_shortcuts()
+
+    def _update_embed_holder_geometry(self, w: int | None = None, h: int | None = None) -> None:
+        """Update the LIVI embed holder to the right half, full height. Uses actual window size when None."""
+        if w is None or h is None:
+            r = self.geometry()
+            w, h = r.width(), r.height()
+        hw = w // 2 - _LIVI_SIDEBAR_WIDTH
+        self._livi_embed_holder.setGeometry(w // 2, 0, hw, h)
+        # Resize any embedded window container (e.g. Xephyr frame) to fill the holder
+        for child in self._livi_embed_holder.findChildren(QWidget):
+            child.setGeometry(0, 0, hw, h)
+
+    def resizeEvent(self, event):
+        """When window is resized (e.g. fullscreen), update layout so embed holder uses actual full height."""
+        super().resizeEvent(event)
+        sz = event.size()
+        w, h = sz.width(), sz.height()
+        central = self.centralWidget()
+        if central and hasattr(central, "setFixedSize"):
+            central.setFixedSize(w, h)
+        if self.view is not None:
+            self.view.setGeometry(0, 0, w, h)
+        if getattr(self, "_livi_embed_holder", None):
+            self._update_embed_holder_geometry(w, h)
 
     def _apply_hud_zoom(self) -> None:
         """Scale the 2560x720 HUD to fit the window when fit_to_screen is True; else use 1:1 (no zoom)."""
@@ -1049,6 +1086,7 @@ def main():
     app = QApplication(_argv)
     app.setApplicationName("Sambar HUD")
     app.setApplicationVersion("1.0.0")
+    app.aboutToQuit.connect(stop_livi_session)
 
     config = Config()
     screen_width = config.get("screen_width", 2560)
