@@ -663,9 +663,11 @@ def _launch_livi_via_xephyr(
         global _livi_pid
         time.sleep(2)
         wid = _get_window_id_by_title(title)
-        # Embed the Xephyr frame into our fullscreen window so it isn't limited by the OS panel and has no host title bar
+        # Embed the Xephyr frame into our fullscreen window so it reaches full height (not limited by OS panel)
         if wid:
             QTimer.singleShot(0, lambda mw=main_window, w=wid: _embed_livi_in_main_window(mw, w))
+            QTimer.singleShot(400, lambda mw=main_window, w=wid: _embed_livi_in_main_window(mw, w) if not getattr(mw, "_livi_embedded", False) else None)
+            QTimer.singleShot(1000, lambda mw=main_window, w=wid: _embed_livi_in_main_window(mw, w) if not getattr(mw, "_livi_embedded", False) else None)
         for w in QApplication.topLevelWidgets():
             if type(w).__name__ == "MainWindow":
                 QTimer.singleShot(0, lambda mw=w: _set_overlay_mode(mw, True))
@@ -1016,6 +1018,13 @@ class MainWindow(QMainWindow):
 def main():
     os.environ.setdefault("LANG", "C.UTF-8")
     os.environ.setdefault("LC_ALL", "C.UTF-8")
+    # When using Xephyr frame, run on X11 so we can embed it (frame then reaches full height, not limited by OS panel)
+    try:
+        _pre_config = Config()
+        if _pre_config.get("carplay.livi_use_xephyr", True):
+            os.environ["QT_QPA_PLATFORM"] = "xcb"
+    except Exception:
+        pass
     if "QT_QPA_PLATFORM" not in os.environ:
         os.environ["QT_QPA_PLATFORM"] = "xcb"
 
